@@ -21,12 +21,20 @@ import sys
 import json
 import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import yaml
 import requests
 
 CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+# 컨테이너는 UTC로 돈다. 아침 7시 KST는 UTC로 전날 22시이므로, 날짜 표기는
+# 반드시 KST로 해야 브리핑에 하루 전 날짜가 찍히지 않는다.
+KST = ZoneInfo("Asia/Seoul")
+
+
+def today_kst() -> datetime.date:
+    return datetime.datetime.now(KST).date()
 
 
 def make_session() -> requests.Session:
@@ -56,15 +64,18 @@ def fetch_quote(session: requests.Session, ticker: str) -> dict:
     if current_price is None and bars:
         current_price = bars[-1][1]
 
+    # 날짜 비교는 거래소 현지시간 기준으로 한다. UTC로 비교하면 장 시간이
+    # UTC 자정을 넘는 거래소에서 마지막 봉을 하루 밀리게 읽는다.
+    offset = datetime.timedelta(seconds=meta.get("gmtoffset") or 0)
+
+    def exchange_date(epoch: int) -> datetime.date:
+        return (datetime.datetime.fromtimestamp(epoch, datetime.timezone.utc) + offset).date()
+
     prev_close = None
     if bars:
         market_time = meta.get("regularMarketTime")
-        market_date = (
-            datetime.datetime.utcfromtimestamp(market_time).date()
-            if market_time
-            else None
-        )
-        last_bar_date = datetime.datetime.utcfromtimestamp(bars[-1][0]).date()
+        market_date = exchange_date(market_time) if market_time else None
+        last_bar_date = exchange_date(bars[-1][0])
         if market_date is not None and last_bar_date == market_date:
             prev_close = bars[-2][1] if len(bars) >= 2 else None
         else:
@@ -163,7 +174,7 @@ def main():
                     "error": str(exc),
                 }
 
-    output = {"date": datetime.date.today().isoformat(), "accounts": []}
+    output = {"date": today_kst().isoformat(), "accounts": []}
     all_rows = []
     for account in accounts:
         rows = [with_pnl(h, quotes[h["ticker"]]) for h in account.get("holdings", [])]
