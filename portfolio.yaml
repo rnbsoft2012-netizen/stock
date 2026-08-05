@@ -1,30 +1,40 @@
 # 내 주식 포트폴리오 (키움증권 보유 기준)
 #
-# domestic: 국내 주식 - KRX 6자리 종목코드 사용 (pykrx 조회용)
-# overseas: 해외 주식 - yfinance 티커 사용 (예: AAPL, TSLA)
+# domestic: 국내 주식
+#   code   - KRX 6자리 종목코드 (네이버뉴스 검색 및 참고용)
+#   ticker - Yahoo Finance 티커. 코스피는 "<코드>.KS", 코스닥은 "<코드>.KQ"
+# overseas: 해외 주식
+#   ticker - Yahoo Finance 티커 (예: AAPL, NVDA)
 #
 # quantity: 보유수량
-# avg_price: 평단가 (매입평균단가) - 손익 계산에 사용
+# avg_price: 평단가 (매입평균단가) - 손익 계산에 사용. 국내는 원, 해외는 달러.
+# news_query: 네이버뉴스 검색에 쓸 한글 키워드 (해외 종목은 한글 회사명 권장)
 #
 # ⚠️ 아래 값은 예시(placeholder)입니다. 실제 키움증권 보유내역으로 교체해주세요.
 
 domestic:
   - name: "삼성전자"
     code: "005930"
+    ticker: "005930.KS"
+    news_query: "삼성전자 주가"
     quantity: 10
     avg_price: 70000
   - name: "SK하이닉스"
     code: "000660"
+    ticker: "000660.KS"
+    news_query: "SK하이닉스 주가"
     quantity: 5
     avg_price: 130000
 
 overseas:
   - name: "Apple"
     ticker: "AAPL"
+    news_query: "애플 주가"
     quantity: 3
     avg_price: 180.0
   - name: "NVIDIA"
     ticker: "NVDA"
+    news_query: "엔비디아 주가"
     quantity: 2
     avg_price: 450.0
 
