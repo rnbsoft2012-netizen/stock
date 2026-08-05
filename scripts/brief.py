@@ -45,6 +45,25 @@ def fmt_pct(pct) -> str:
     return "-" if pct is None else f"{pct:+.2f}%"
 
 
+def vs_52w_high_pct(row: dict):
+    """52주 고점 대비 현재가 위치(%). 고점에서 얼마나 내려와 있는지."""
+    high = row.get("week52_high")
+    price = row.get("current_price")
+    if not high or price is None:
+        return None
+    return round((price - high) / high * 100, 1)
+
+
+def fmt_position(row: dict) -> str:
+    """전략 코멘트의 근거가 되는 위치 정보 한 줄: 비중과 52주 고점 대비."""
+    parts = []
+    if row.get("weight_pct") is not None:
+        parts.append(f"비중{row['weight_pct']}%")
+    if row.get("vs_52w_high_pct") is not None:
+        parts.append(f"52주고점{row['vs_52w_high_pct']:+.1f}%")
+    return " ".join(parts)
+
+
 def day_move_won(row: dict):
     """하루 동안 이 종목의 평가액이 움직인 금액."""
     pct = row.get("day_change_pct")
@@ -164,6 +183,15 @@ def build_briefing(portfolio_path: str | None = None) -> dict:
     combined = {"summary": summarize(all_rows), "holdings": holdings}
     today = today_kst()
 
+    # 전략 코멘트는 "이 종목이 내 포트폴리오에서 얼마나 큰가"와 "고점 대비 어디에
+    # 있나"를 알아야 쓸 수 있다. 둘 다 여기서 미리 계산해 넘긴다.
+    total_valuation = combined["summary"]["valuation"]
+    for entry in holdings:
+        entry["weight_pct"] = (
+            round(entry["valuation"] / total_valuation * 100, 1) if total_valuation else None
+        )
+        entry["vs_52w_high_pct"] = vs_52w_high_pct(entry)
+
     notable = []
     for row in pick_notable(holdings):
         notable.append(
@@ -175,9 +203,12 @@ def build_briefing(portfolio_path: str | None = None) -> dict:
                 "stat_line": (
                     f"{row['name']} {row['current_price']:,.0f}원 "
                     f"({fmt_pct(row['day_change_pct'])})\n"
-                    f"손익 {fmt_won(row['profit_loss'])}({fmt_pct(row['profit_loss_pct'])})"
+                    f"손익 {fmt_won(row['profit_loss'])}({fmt_pct(row['profit_loss_pct'])})\n"
+                    f"{fmt_position(row)}"
                 ),
                 "held_in": row["accounts"],
+                "weight_pct": row["weight_pct"],
+                "vs_52w_high_pct": row["vs_52w_high_pct"],
                 "week52_high": row["week52_high"],
                 "week52_low": row["week52_low"],
             }
