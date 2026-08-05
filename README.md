@@ -32,6 +32,8 @@
 | 네이버뉴스 검색 (PlayMCP `NaverSearch-search_news`) | 확인됨 |
 | 시세 조회 (`scripts/prices.py`) | 확인됨 — 국내·해외 모두 |
 | 네트워크 정책 (Yahoo Finance 허용) | 확인됨 |
+| 브리핑 6건 실제 전송 | 확인됨 (2026-08-06, 요약 1 + 종목 5) |
+| 아침 7시 예약 | ⚠️ **claude.ai 예약 UI에서 만들어야 함** — 대화 안에서 도구로 만든 예약에는 PlayMCP가 붙지 않아 카톡 전송이 안 된다. [자세히](docs/morning_routine.md) |
 
 ## 데이터 소스 선택 이유
 
