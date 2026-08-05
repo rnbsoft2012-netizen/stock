@@ -1,45 +1,47 @@
-# 내 주식 포트폴리오 (키움증권 보유 기준)
+# 내 주식 포트폴리오 (키움증권, 계좌 2개)
 #
-# domestic: 국내 주식
-#   code   - KRX 6자리 종목코드 (네이버뉴스 검색 및 참고용)
-#   ticker - Yahoo Finance 티커. 코스피는 "<코드>.KS", 코스닥은 "<코드>.KQ"
-# overseas: 해외 주식
-#   ticker - Yahoo Finance 티커 (예: AAPL, NVDA)
-#
-# quantity: 보유수량
-# avg_price: 평단가 (매입평균단가) - 손익 계산에 사용. 국내는 원, 해외는 달러.
-# news_query: 네이버뉴스 검색에 쓸 한글 키워드 (해외 종목은 한글 회사명 권장)
-#
-# ⚠️ 아래 값은 예시(placeholder)입니다. 실제 키움증권 보유내역으로 교체해주세요.
+# ticker: Yahoo Finance 티커. 코스피는 "<코드>.KS", 코스닥은 "<코드>.KQ".
+#   ⚠️ 코스닥 종목에 .KS 를 붙여도 Yahoo가 응답을 주지만 전혀 다른 종목의
+#      데이터가 나온다. 종목을 추가할 때는 scripts/resolve_tickers.py 로
+#      실제 시세를 대조해 확인할 것.
+# quantity:  보유수량
+# avg_price: 매입평균단가 (원)
+# news_query: 네이버뉴스 검색 키워드
 
-domestic:
-  - name: "삼성전자"
-    code: "005930"
-    ticker: "005930.KS"
-    news_query: "삼성전자 주가"
-    quantity: 10
-    avg_price: 70000
-  - name: "SK하이닉스"
-    code: "000660"
-    ticker: "000660.KS"
-    news_query: "SK하이닉스 주가"
-    quantity: 5
-    avg_price: 130000
+accounts:
+  - id: "A"
+    name: "계좌 A"
+    holdings:
+      - {name: "SK하이닉스",       code: "000660", ticker: "000660.KS", quantity: 20,  avg_price: 971000,  news_query: "SK하이닉스"}
+      - {name: "삼성전자",         code: "005930", ticker: "005930.KS", quantity: 45,  avg_price: 279389,  news_query: "삼성전자 주가"}
+      - {name: "삼성SDI",          code: "006400", ticker: "006400.KS", quantity: 13,  avg_price: 465115,  news_query: "삼성SDI"}
+      - {name: "현대모비스",       code: "012330", ticker: "012330.KS", quantity: 11,  avg_price: 534455,  news_query: "현대모비스"}
+      - {name: "케이엠더블유",     code: "032500", ticker: "032500.KQ", quantity: 193, avg_price: 28822,   news_query: "케이엠더블유"}
+      - {name: "NAVER",            code: "035420", ticker: "035420.KS", quantity: 29,  avg_price: 242914,  news_query: "네이버 주가"}
+      - {name: "한미반도체",       code: "042700", ticker: "042700.KS", quantity: 17,  avg_price: 277000,  news_query: "한미반도체"}
+      - {name: "LG화학",           code: "051910", ticker: "051910.KS", quantity: 19,  avg_price: 366526,  news_query: "LG화학"}
+      - {name: "산일전기",         code: "062040", ticker: "062040.KS", quantity: 25,  avg_price: 192860,  news_query: "산일전기"}
+      - {name: "티씨케이",         code: "064760", ticker: "064760.KQ", quantity: 37,  avg_price: 232811,  news_query: "티씨케이"}
+      - {name: "로보티즈",         code: "108490", ticker: "108490.KQ", quantity: 18,  avg_price: 346056,  news_query: "로보티즈"}
+      - {name: "KODEX 코스닥150",  code: "229200", ticker: "229200.KS", quantity: 100, avg_price: 20140,   news_query: "코스닥150 지수"}
+      - {name: "KODEX 코스피100",  code: "237350", ticker: "237350.KS", quantity: 234, avg_price: 72380,   news_query: "코스피 지수"}
+      - {name: "엘앤씨바이오",     code: "290650", ticker: "290650.KQ", quantity: 60,  avg_price: 69323,   news_query: "엘앤씨바이오"}
+      - {name: "세아제강",         code: "306200", ticker: "306200.KS", quantity: 42,  avg_price: 163893,  news_query: "세아제강"}
+      - {name: "달바글로벌",       code: "483650", ticker: "483650.KS", quantity: 15,  avg_price: 151633,  news_query: "달바글로벌"}
+      - {name: "한화비전",         code: "489790", ticker: "489790.KS", quantity: 72,  avg_price: 75549,   news_query: "한화비전"}
 
-overseas:
-  - name: "Apple"
-    ticker: "AAPL"
-    news_query: "애플 주가"
-    quantity: 3
-    avg_price: 180.0
-  - name: "NVIDIA"
-    ticker: "NVDA"
-    news_query: "엔비디아 주가"
-    quantity: 2
-    avg_price: 450.0
+  - id: "B"
+    name: "계좌 B"
+    holdings:
+      - {name: "SK하이닉스",       code: "000660", ticker: "000660.KS", quantity: 24,  avg_price: 2212042, news_query: "SK하이닉스"}
+      - {name: "현대모비스",       code: "012330", ticker: "012330.KS", quantity: 9,   avg_price: 536653,  news_query: "현대모비스"}
+      - {name: "오킨스전자",       code: "080580", ticker: "080580.KQ", quantity: 136, avg_price: 17391,   news_query: "오킨스전자"}
+      - {name: "테크윙",           code: "089030", ticker: "089030.KQ", quantity: 109, avg_price: 53647,   news_query: "테크윙"}
+      - {name: "RFHIC",            code: "218410", ticker: "218410.KQ", quantity: 20,  avg_price: 52300,   news_query: "RFHIC"}
+      - {name: "디앤디파마텍",     code: "347850", ticker: "347850.KQ", quantity: 53,  avg_price: 94364,   news_query: "디앤디파마텍"}
+      - {name: "LG에너지솔루션",   code: "373220", ticker: "373220.KS", quantity: 15,  avg_price: 430200,  news_query: "LG에너지솔루션"}
+      - {name: "한국피아이엠",     code: "448900", ticker: "448900.KQ", quantity: 20,  avg_price: 53400,   news_query: "한국피아이엠"}
 
-# 메시지 설정
 settings:
-  message_level: "detailed"   # "detailed" = 종목별 상세, "summary" = 간결 요약
   send_time_kst: "07:00"
   timezone: "Asia/Seoul"

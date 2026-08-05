@@ -2,10 +2,9 @@
 """
 포트폴리오 시세/손익 조회 스크립트.
 
-국내(.KS/.KQ)와 해외 종목 모두 Yahoo Finance chart API에서 시세를 가져와
-portfolio.yaml의 보유수량/평단가와 합쳐 평가금액과 손익을 계산한다.
-해외 종목은 Yahoo 뉴스 헤드라인도 함께 담는다
-(국내 종목 뉴스는 PlayMCP 네이버뉴스 검색으로 별도 조회한다).
+Yahoo Finance chart API에서 시세를 가져와 portfolio.yaml의 계좌별
+보유수량/평단가와 합쳐 평가금액과 손익을 계산한다.
+뉴스는 이 스크립트가 아니라 PlayMCP 네이버뉴스 검색으로 별도 조회한다.
 
 yfinance 대신 requests를 직접 쓰는 이유: yfinance는 내부적으로 curl_cffi로
 브라우저 TLS 지문을 위장하는데, 클라우드 세션의 보안 프록시가 그 연결을
@@ -27,7 +26,6 @@ import yaml
 import requests
 
 CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
-SEARCH_URL = "https://query1.finance.yahoo.com/v1/finance/search"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
 
 
@@ -48,15 +46,11 @@ def fetch_quote(session: requests.Session, ticker: str) -> dict:
     result = resp.json()["chart"]["result"][0]
     meta = result["meta"]
 
-    # 일봉 시계열에서 전일 종가를 찾는다. 마지막 봉이 오늘(=현재가와 같은 날)이면
+    # 일봉 시계열에서 전일 종가를 찾는다. 마지막 봉이 현재가와 같은 날이면
     # 그 앞 봉이 전일 종가, 아니면 마지막 봉 자체가 전일 종가다.
     timestamps = result.get("timestamp") or []
     raw_closes = result["indicators"]["quote"][0].get("close") or []
-    bars = [
-        (ts, close)
-        for ts, close in zip(timestamps, raw_closes)
-        if close is not None
-    ]
+    bars = [(ts, c) for ts, c in zip(timestamps, raw_closes) if c is not None]
 
     current_price = meta.get("regularMarketPrice")
     if current_price is None and bars:
@@ -80,58 +74,63 @@ def fetch_quote(session: requests.Session, ticker: str) -> dict:
     if current_price is not None and prev_close:
         day_change_pct = round((current_price - prev_close) / prev_close * 100, 2)
 
+    week52_low = meta.get("fiftyTwoWeekLow")
     return {
         "current_price": current_price,
         "day_change_pct": day_change_pct,
         "currency": meta.get("currency"),
         "week52_high": meta.get("fiftyTwoWeekHigh"),
-        "week52_low": meta.get("fiftyTwoWeekLow"),
+        # Yahoo가 국내 종목에 0을 주는 경우가 있어 걸러낸다
+        "week52_low": week52_low if week52_low else None,
+        "yahoo_name": meta.get("shortName") or meta.get("longName"),
     }
 
 
-def fetch_news(session: requests.Session, ticker: str, count: int = 3) -> list:
-    """해외 종목용 Yahoo 뉴스 헤드라인."""
-    try:
-        resp = session.get(
-            SEARCH_URL,
-            params={"q": ticker, "newsCount": count, "quotesCount": 0},
-            timeout=20,
-        )
-        resp.raise_for_status()
-        return [
-            {
-                "title": n.get("title"),
-                "publisher": n.get("publisher"),
-                "link": n.get("link"),
-            }
-            for n in resp.json().get("news", [])[:count]
-            if n.get("title")
-        ]
-    except Exception:
-        return []
-
-
-def with_pnl(item: dict, quote: dict) -> dict:
+def with_pnl(holding: dict, quote: dict) -> dict:
     """보유수량/평단가와 시세를 합쳐 평가금액과 손익을 계산한다."""
     row = {
-        "name": item["name"],
-        "ticker": item["ticker"],
-        "quantity": item["quantity"],
-        "avg_price": item["avg_price"],
+        "name": holding["name"],
+        "code": holding.get("code"),
+        "ticker": holding["ticker"],
+        "news_query": holding.get("news_query", holding["name"]),
+        "quantity": holding["quantity"],
+        "avg_price": holding["avg_price"],
         **quote,
     }
-    for optional in ("code", "news_query"):
-        if item.get(optional):
-            row[optional] = item[optional]
-
     price = quote["current_price"]
     if price is not None:
-        valuation = price * item["quantity"]
-        cost = item["avg_price"] * item["quantity"]
-        row["valuation"] = round(valuation, 2)
-        row["profit_loss"] = round(valuation - cost, 2)
+        valuation = price * holding["quantity"]
+        cost = holding["avg_price"] * holding["quantity"]
+        row["valuation"] = round(valuation)
+        row["cost"] = round(cost)
+        row["profit_loss"] = round(valuation - cost)
         row["profit_loss_pct"] = round((valuation - cost) / cost * 100, 2) if cost else None
     return row
+
+
+def summarize(rows: list) -> dict:
+    """평가금액이 계산된 행들의 합계."""
+    priced = [r for r in rows if r.get("valuation") is not None]
+    valuation = sum(r["valuation"] for r in priced)
+    cost = sum(r["cost"] for r in priced)
+    # 전일 종가 기준 평가금액과 비교해 하루 등락을 낸다
+    prev_valuation = sum(
+        r["valuation"] / (1 + r["day_change_pct"] / 100)
+        for r in priced
+        if r.get("day_change_pct") is not None
+    )
+    covered = sum(r["valuation"] for r in priced if r.get("day_change_pct") is not None)
+    return {
+        "valuation": round(valuation),
+        "cost": round(cost),
+        "profit_loss": round(valuation - cost),
+        "profit_loss_pct": round((valuation - cost) / cost * 100, 2) if cost else None,
+        "day_change_pct": (
+            round((covered - prev_valuation) / prev_valuation * 100, 2)
+            if prev_valuation
+            else None
+        ),
+    }
 
 
 def main():
@@ -142,21 +141,73 @@ def main():
         portfolio = yaml.safe_load(f)
 
     session = make_session()
-    output = {"date": datetime.date.today().isoformat(), "domestic": [], "overseas": []}
+    accounts = portfolio.get("accounts", [])
 
-    for item in portfolio.get("domestic", []):
-        try:
-            output["domestic"].append(with_pnl(item, fetch_quote(session, item["ticker"])))
-        except Exception as exc:
-            output["domestic"].append({"name": item["name"], "ticker": item["ticker"], "error": str(exc)})
+    # 같은 종목을 여러 계좌가 들고 있을 수 있으므로 티커당 한 번만 조회한다
+    quotes = {}
+    for account in accounts:
+        for holding in account.get("holdings", []):
+            ticker = holding["ticker"]
+            if ticker in quotes:
+                continue
+            try:
+                quotes[ticker] = fetch_quote(session, ticker)
+            except Exception as exc:
+                quotes[ticker] = {
+                    "current_price": None,
+                    "day_change_pct": None,
+                    "currency": None,
+                    "week52_high": None,
+                    "week52_low": None,
+                    "yahoo_name": None,
+                    "error": str(exc),
+                }
 
-    for item in portfolio.get("overseas", []):
-        try:
-            row = with_pnl(item, fetch_quote(session, item["ticker"]))
-            row["news"] = fetch_news(session, item["ticker"])
-            output["overseas"].append(row)
-        except Exception as exc:
-            output["overseas"].append({"name": item["name"], "ticker": item["ticker"], "error": str(exc)})
+    output = {"date": datetime.date.today().isoformat(), "accounts": []}
+    all_rows = []
+    for account in accounts:
+        rows = [with_pnl(h, quotes[h["ticker"]]) for h in account.get("holdings", [])]
+        all_rows.extend(rows)
+        output["accounts"].append(
+            {
+                "id": account.get("id"),
+                "name": account.get("name"),
+                "summary": summarize(rows),
+                "holdings": rows,
+            }
+        )
+
+    # 여러 계좌에 걸친 같은 종목은 하나로 합산한 관점도 제공한다
+    merged = {}
+    for row in all_rows:
+        if row.get("valuation") is None:
+            continue
+        entry = merged.setdefault(
+            row["ticker"],
+            {
+                "name": row["name"],
+                "ticker": row["ticker"],
+                "news_query": row["news_query"],
+                "day_change_pct": row["day_change_pct"],
+                "current_price": row["current_price"],
+                "quantity": 0,
+                "valuation": 0,
+                "cost": 0,
+            },
+        )
+        entry["quantity"] += row["quantity"]
+        entry["valuation"] += row["valuation"]
+        entry["cost"] += row["cost"]
+    for entry in merged.values():
+        entry["profit_loss"] = entry["valuation"] - entry["cost"]
+        entry["profit_loss_pct"] = (
+            round(entry["profit_loss"] / entry["cost"] * 100, 2) if entry["cost"] else None
+        )
+
+    output["combined"] = {
+        "summary": summarize(all_rows),
+        "holdings": sorted(merged.values(), key=lambda e: -e["valuation"]),
+    }
 
     print(json.dumps(output, ensure_ascii=False, indent=2))
 
