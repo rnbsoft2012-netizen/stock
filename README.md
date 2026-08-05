@@ -32,6 +32,8 @@
 | 네이버뉴스 검색 (PlayMCP `NaverSearch-search_news`) | 확인됨 |
 | 시세 조회 (`scripts/prices.py`) | 확인됨 — 국내·해외 모두 |
 | 네트워크 정책 (Yahoo Finance 허용) | 확인됨 |
+| 브리핑 6건 실제 발송 | 확인됨 — 2026-08-06 아침분 전송 성공 |
+| 세션 안에서 아침 7시 예약 생성 | **불가** — 커넥터를 못 붙임, claude.ai Routines UI에서 만들어야 함 |
 
 ## 데이터 소스 선택 이유
 

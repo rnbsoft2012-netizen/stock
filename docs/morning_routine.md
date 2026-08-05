@@ -16,6 +16,18 @@ PlayMCP 없이 시작한 세션에서 예약을 만들면 그 예약도 PlayMCP�
 > 카톡으로 테스트 발송해줘. 형식 확인하고 나면 매일 아침 7시(KST) 예약도
 > 걸어줘. 브랜치는 `claude/stock-portfolio-kakao-alerts-c7lqtv`.
 
+### 예약(Routine)은 claude.ai Routines UI에서 만들어야 한다
+
+2026-08-06 확인: PlayMCP가 켜진 세션 안에서 예약 생성 도구(`create_trigger`)를
+호출해도 **이 조직에서는 커넥터 파라미터 자체가 차단된다**
+("the connectors parameter is not available for this organization"). 파라미터를
+빼고 만들면 예약은 생성되지만 `stores no MCP connectors` 경고가 붙고, 그
+예약이 깨우는 세션에는 `mcp__*` 도구가 아예 없어 카톡 전송이 불가능하다.
+
+따라서 아침 7시 예약은 **claude.ai의 Routines UI에서 직접 만들어야 한다.**
+거기서 PlayMCP 커넥터를 붙인 뒤, 아래 "절차"를 그대로 수행하라는 프롬프트를
+넣으면 된다. 세션 안에서 만든 예약은 카톡을 못 보낸다.
+
 새 대화 시작 전 확인할 것:
 - 커넥터 메뉴에서 **PlayMCP 토글이 켜져 있는지** (하위 서버 `KakaotalkChat`,
   `NaverSearch` 둘 다)
