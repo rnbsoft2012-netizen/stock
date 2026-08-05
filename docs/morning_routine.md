@@ -24,9 +24,54 @@ PlayMCP 없이 시작한 세션에서 예약을 만들면 그 예약도 PlayMCP�
 빼고 만들면 예약은 생성되지만 `stores no MCP connectors` 경고가 붙고, 그
 예약이 깨우는 세션에는 `mcp__*` 도구가 아예 없어 카톡 전송이 불가능하다.
 
+2026-08-06 재확인: PlayMCP 커넥터를 연결 해제 후 재연결하고 같은 호출을 다시
+해도 **에러 문구가 동일하다.** 재연결 자체는 정상이었다(같은 세션에서 네이버
+뉴스 검색이 성공했다). 즉 커넥터 상태의 문제가 아니라 조직 정책이므로,
+껐다 켜는 것으로는 해결되지 않는다.
+
 따라서 아침 7시 예약은 **claude.ai의 Routines UI에서 직접 만들어야 한다.**
 거기서 PlayMCP 커넥터를 붙인 뒤, 아래 "절차"를 그대로 수행하라는 프롬프트를
 넣으면 된다. 세션 안에서 만든 예약은 카톡을 못 보낸다.
+
+#### Routines UI에 넣을 설정값
+
+| 항목 | 값 |
+| --- | --- |
+| 스케줄 | 매일 오전 7:00 (KST) |
+| 커넥터 | **PlayMCP** (하위 `KakaotalkChat`, `NaverSearch` 둘 다) |
+| 저장소 | `rnbsoft2012-netizen/stock` |
+| 브랜치 | `claude/stock-portfolio-kakao-alerts-c7lqtv` |
+| 환경 | 이 저장소가 연결된 환경 (`env_01L3SqK1aj3j8e5ZheKZ4kXt`) |
+
+#### Routines UI에 붙여넣을 프롬프트 (그대로 복사)
+
+```text
+저장소 rnbsoft2012-netizen/stock, 브랜치 claude/stock-portfolio-kakao-alerts-c7lqtv
+에서 오늘자 주식 모닝 브리핑을 만들어 카카오톡으로 보내주세요.
+
+절차는 저장소의 docs/morning_routine.md에 전부 적혀 있습니다. 먼저 그 문서를
+읽고 거기 적힌 절차를 그대로 따르세요. 요약하면:
+
+1. python scripts/brief.py 실행 (필요하면 pip install -r requirements.txt).
+   요약 메시지와 주목 종목 5개가 JSON으로 나옵니다.
+2. 주목 종목 5개 각각에 대해 PlayMCP 네이버뉴스 검색(NaverSearch-search_news)을
+   news_query로 sort=date, display=3 호출합니다.
+3. 요약 1건 + 종목 5건 = 총 6건의 메시지를 작성합니다. 각 메시지 앞에 [n/6]을
+   붙이고, 종목 메시지는 stat_line + "뉴스:" 헤드라인 한 줄 + "코멘트:" 한 줄
+   구성입니다. 추측에 근거한 목표가나 매수·매도 지시는 쓰지 마세요. 마지막
+   메시지 끝에 "* 투자 참고용이며 투자 권유가 아닙니다."를 붙입니다.
+4. 메시지 6개를 JSON 배열 파일로 저장하고 python scripts/brief.py --check <파일>
+   로 200자 이내인지 검증합니다. 초과분은 줄여서 다시 검증하세요.
+5. PlayMCP 카카오톡 나에게 보내기(KakaotalkChat-MemoChat)로 [1/6]부터 순서대로
+   6건 전송합니다.
+
+저장소 코드는 수정하지 말고, 커밋이나 푸시도 하지 마세요. 전송에 실패하면
+원인을 파악해 재시도하고, 그래도 안 되면 무엇이 왜 실패했는지 남기세요.
+```
+
+만든 뒤에는 루틴을 **한 번 수동 실행(Run now)** 해서 카톡 6건이 실제로 오는지
+확인한다. 안 오면 그 루틴에도 커넥터가 안 붙은 것이므로, 조직 관리자 설정에서
+루틴·커넥터 정책을 확인해야 한다.
 
 새 대화 시작 전 확인할 것:
 - 커넥터 메뉴에서 **PlayMCP 토글이 켜져 있는지** (하위 서버 `KakaotalkChat`,
