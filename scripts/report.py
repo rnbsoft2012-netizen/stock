@@ -17,7 +17,10 @@ Claude가 NOTES 파일로 넘긴다. **목표가는 출처가 있을 때만 채�
 비워두고 카드에 "컨센서스 확인 안 됨"으로 표시한다.
 
 사용법:
-    python scripts/report.py NOTES_FILE [BRIEFING_JSON]
+    python scripts/report.py NOTES_FILE [BRIEFING_JSON] [TECH_JSON]
+
+TECH_JSON은 `python scripts/technical.py`의 출력. 넘기면 카드마다 추세·상대강도·
+위치·변동성 블록과 스탠스가 붙고, 맨 위에 포트폴리오 구조 경고가 추가된다.
 
 NOTES_FILE:
     {"005930.KS": {
@@ -97,7 +100,87 @@ def account_rows(row: dict, price) -> str:
     )
 
 
-def card(row: dict, note: dict) -> str:
+TREND_KR = {"up": "상승", "down": "하락", "side": "횡보", "unknown": "판정 불가"}
+TREND_COLOR = {"up": GREEN, "down": RED, "side": "#8a6d00", "unknown": MUTED}
+
+
+def tech_block(t: dict) -> str:
+    """추세·상대강도·위치·변동성 네 축을 한 덩어리로.
+
+    상대강도(RS)를 굵게 두는 이유: 지수가 4% 빠지는 날에는 거의 모든 종목이
+    내린다. 종목 자체의 문제인지 시장 탓인지는 RS로만 갈린다.
+    """
+    if not t or t.get("error"):
+        return ""
+    trend = t.get("trend", "unknown")
+    rs3, rs6 = t.get("rs_3m_pct"), t.get("rs_6m_pct")
+
+    def rs_span(label, v):
+        if v is None:
+            return f"{label} -"
+        color = GREEN if v >= 0 else RED
+        return f"{label} <span style='color:{color}'>{v:+.1f}%p</span>"
+
+    rows = [
+        f"<b style='color:{TREND_COLOR[trend]}'>추세 {TREND_KR[trend]}</b>"
+        f" · MA60 기울기 {t.get('ma60_slope_pct')}%"
+        f" · MA60 대비 {t.get('vs_ma60_pct')}%",
+        f"지수 대비 {rs_span('3M', rs3)} / {rs_span('6M', rs6)}",
+        f"52주 위치 {t.get('pos_52w_pct')}% "
+        f"(저점 {t.get('low_52w'):,} / 고점 {t.get('high_52w'):,})",
+        f"60일 지지 {t.get('swing_low_60d'):,} / 저항 {t.get('swing_high_60d'):,}"
+        f" · RSI {t.get('rsi14')}",
+        f"연변동성 {t.get('vol_annual_pct')}% · 1년 최대낙폭 "
+        f"{t.get('max_drawdown_1y_pct')}% · 거래량비 {t.get('volume_ratio')}",
+    ]
+    return (
+        f"<div style='margin-top:10px;padding:9px 11px;border:1px dashed {BORDER};"
+        f"border-radius:6px;font-size:12px;line-height:1.7;color:#3c4450'>"
+        + "<br>".join(rows)
+        + f"<div style='margin-top:6px;font-size:13px'><b>▶ 스탠스</b> "
+        f"{t.get('stance', '')}</div></div>"
+    )
+
+
+def portfolio_risk(holdings: list, tech: dict) -> str:
+    """종목별 카드보다 먼저 봐야 하는 것: 집중도와 추세 분포."""
+    if not tech:
+        return ""
+    by_trend = {"up": [], "down": [], "side": [], "unknown": []}
+    weak = []
+    for row in holdings:
+        t = tech.get(row["ticker"]) or {}
+        trend = t.get("trend", "unknown")
+        by_trend.setdefault(trend, []).append(row)
+        if trend == "down" and (t.get("rs_6m_pct") or 0) < 0:
+            weak.append(row)
+
+    def wsum(rows):
+        return round(sum(r.get("weight_pct") or 0 for r in rows), 1)
+
+    top = max(holdings, key=lambda r: r.get("weight_pct") or 0)
+    top_t = tech.get(top["ticker"]) or {}
+    lines = [
+        f"1위 종목 <b>{top['name']} {top['weight_pct']}%</b> — 연변동성 "
+        f"{top_t.get('vol_annual_pct')}%, 1년 최대낙폭 {top_t.get('max_drawdown_1y_pct')}%. "
+        f"포트폴리오 전체 등락의 상당 부분이 이 한 종목에서 나온다.",
+        f"추세 분포 — 상승 {len(by_trend['up'])} / 횡보 {len(by_trend['side'])} / "
+        f"하락 {len(by_trend['down'])}종목 (하락 추세 비중 합 {wsum(by_trend['down'])}%)",
+        f"추세·상대강도 모두 약한 종목 {len(weak)}개, 비중 합 {wsum(weak)}% — "
+        f"물타기가 아니라 비중 관리로 접근할 구간: "
+        + ", ".join(r["name"] for r in sorted(weak, key=lambda r: -(r["weight_pct"] or 0))),
+    ]
+    return (
+        f"<div style='border:1px solid {BORDER};border-left:4px solid {RED};"
+        f"border-radius:8px;padding:14px;margin-bottom:16px;background:#fffbfb'>"
+        f"<div style='font-weight:700;margin-bottom:7px'>먼저 볼 것 — 포트폴리오 구조</div>"
+        f"<div style='font-size:13px;line-height:1.75'>"
+        + "<br>".join(f"· {x}" for x in lines)
+        + "</div></div>"
+    )
+
+
+def card(row: dict, note: dict, tech_row: dict | None = None) -> str:
     price = row.get("current_price")
     day = row.get("day_change_pct")
     arrow = "▲" if (day or 0) > 0 else ("▼" if (day or 0) < 0 else "―")
@@ -197,15 +280,16 @@ def card(row: dict, note: dict) -> str:
         + tgt_block
         + stats
         + account_rows(row, price)
+        + tech_block(tech_row or {})
         + "".join(body)
         + "</div>"
     )
 
 
-def build(notes: dict, briefing: dict | None = None) -> dict:
+def build(notes: dict, briefing: dict | None = None, tech: dict | None = None) -> dict:
     briefing = briefing or build_briefing()
+    tech = tech or {}
     date = briefing["date"]
-    s = briefing["combined"]["summary"] if "combined" in briefing else None
     holdings = briefing["all_holdings"]
 
     summary = (
@@ -216,7 +300,10 @@ def build(notes: dict, briefing: dict | None = None) -> dict:
         f"{briefing['summary_message']}</pre></div>"
     )
 
-    cards = [card(row, notes.get(row["ticker"], {})) for row in holdings]
+    cards = [
+        card(row, notes.get(row["ticker"], {}), tech.get(row["ticker"]))
+        for row in holdings
+    ]
 
     html = (
         f"<div style='font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\","
@@ -225,6 +312,7 @@ def build(notes: dict, briefing: dict | None = None) -> dict:
         f"<div style='font-size:13px;color:{MUTED};margin-bottom:16px'>"
         f"{date} · 보유 {len(holdings)}종목 · 조회 시점 시세 기준</div>"
         + summary
+        + portfolio_risk(holdings, tech)
         + "".join(cards)
         + f"<p style='color:{MUTED};font-size:12px;margin-top:18px'>{DISCLAIMER}</p>"
         f"</div>"
@@ -237,10 +325,12 @@ def main():
         print(__doc__.strip(), file=sys.stderr)
         return 2
     notes = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-    briefing = None
+    briefing = tech = None
     if len(sys.argv) > 2:
         briefing = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
-    print(json.dumps(build(notes, briefing), ensure_ascii=False))
+    if len(sys.argv) > 3:
+        tech = json.loads(Path(sys.argv[3]).read_text(encoding="utf-8"))
+    print(json.dumps(build(notes, briefing, tech), ensure_ascii=False))
     return 0
 
 
