@@ -137,26 +137,45 @@ PlayMCP 없이 시작한 세션에서 예약을 만들면 그 예약도 PlayMCP�
    해당 메시지를 줄여서 다시 검증한다.
 6. PlayMCP 카카오톡 나에게 보내기(`KakaotalkChat-MemoChat`)로 [1/6]부터
    순서대로 6건 전송한다.
-7. Gmail 커넥터가 이 세션에 있으면 `scripts/mailbody.py`로 본문을 만들어
-   rnbsoft2012@gmail.com 앞으로 **초안을 생성**한다 ("메일" 절 참조).
-   자동 발송은 불가능하므로 초안까지만 만들고, 카톡 마지막 메시지 뒤에
-   초안을 만들었다는 사실을 세션에 남긴다. 커넥터가 없으면 건너뛴다.
+7. `scripts/mailbody.py`로 메일 본문을 만들어 rnbsoft2012@gmail.com 앞으로
+   보낸다 ("메일" 절 참조). **Zapier 도구가 있으면 실제 발송**하고, 없으면
+   Gmail 커넥터로 **초안 생성**으로 대체한다. 둘 다 없으면 건너뛴다.
+   어느 쪽을 했는지 세션에 남긴다.
 8. 전송 실패 시 원인을 파악해 재시도한다. PlayMCP가 이 세션에서 꺼져 있으면
    (`enabledInChat: false`) 전송이 불가능하므로, 그 사실을 세션에 남긴다.
 
-## 메일: 초안까지만 자동, 발송은 수동
+## 메일: Zapier로 발송, 없으면 Gmail 초안
 
 브리핑을 카톡과 **함께 rnbsoft2012@gmail.com 으로도** 보내달라는 요청에 따라
-2026-08-06에 Gmail 커넥터를 연결했다. **다만 자동 발송은 불가능하다.**
+2026-08-06에 Gmail 커넥터와 Zapier 커넥터를 연결했다. **발송 경로는 Zapier다.**
 
-- Gmail 커넥터에는 **보내기 도구가 없다.** `create_draft`, `update_draft`,
+- **Gmail 커넥터로는 발송할 수 없다.** `create_draft`, `update_draft`,
   `list_drafts`와 읽기·검색·라벨 도구뿐이다. 커넥터 설명 자체가
-  "Draft replies, summarize threads, & search your inbox"다.
-- SMTP 직접 발송도 불가능하다. 이 환경에서 `smtp.gmail.com` 587/465 연결이
-  모두 차단된다. 게다가 앱 비밀번호를 둘 안전한 저장소가 없다.
+  "Draft replies, summarize threads, & search your inbox"다. 권한 설정 문제가
+  아니라 설계이므로 조직 설정을 바꿔도 열리지 않는다.
+- **Zapier 커넥터의 Gmail 액션에는 발송이 있다.** 공식 디렉터리 설명에도
+  "Run workflows like sending emails"라고 적혀 있다.
+- SMTP 직접 발송은 불가능하다. 이 환경에서 `smtp.gmail.com` 587/465 연결이
+  차단되고, 앱 비밀번호를 둘 안전한 저장소도 없다.
 
-따라서 **매일 아침 초안(draft)까지 자동 생성**하고, 발송 버튼은 사람이 누른다.
-초안은 Gmail의 "임시보관함"에 쌓이므로 보내지 않고 읽기만 해도 된다.
+### Zapier로 보내는 법
+
+액션은 `enable_zapier_action`으로 이미 활성화해두었다
+(`selected_api`: `GoogleMailV2CLIAPI`, `action`: `message`). Zapier 쪽에서
+Google 계정 인증도 마쳤다. 호출은 `execute_zapier_write_action`으로 한다.
+
+| 파라미터 | 값 |
+| --- | --- |
+| `to` | rnbsoft2012@gmail.com |
+| `subject` | `mailbody.py` 출력의 `subject` |
+| `body` | `mailbody.py` 출력의 `html` |
+| `body_type` | `html` |
+
+**Zapier 도구가 이 세션에 없으면** (MCP 서버가 끊기는 경우가 있다) 발송을
+포기하지 말고 **Gmail 커넥터로 초안을 만든다** — `create_draft`에 `to`,
+`subject`, `body`(평문), `htmlBody`(html)를 넣는다. 초안은 Gmail
+"임시보관함"에 쌓이므로 보내지 않고 읽기만 해도 된다. 어느 쪽을 했는지는
+세션에 남긴다.
 
 커넥터에 대해 하나 정정: "커넥터는 세션 시작 시점에만 로드된다"고 적어뒀었는데,
 Gmail은 **이미 떠 있던 세션에 도중 반영됐다**(`enabledInChat: true`). 커넥터를
