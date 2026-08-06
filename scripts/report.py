@@ -104,41 +104,78 @@ TREND_KR = {"up": "상승", "down": "하락", "side": "횡보", "unknown": "판�
 TREND_COLOR = {"up": GREEN, "down": RED, "side": "#8a6d00", "unknown": MUTED}
 
 
-def tech_block(t: dict) -> str:
-    """추세·상대강도·위치·변동성 네 축을 한 덩어리로.
+def tech_line(t: dict) -> str:
+    """지표는 카드의 주인공이 아니라 "▶ 대응"의 근거다. 그래서 한 줄로 줄인다.
 
-    상대강도(RS)를 굵게 두는 이유: 지수가 4% 빠지는 날에는 거의 모든 종목이
+    상대강도(RS)를 빼지 않는 이유: 지수가 4% 빠지는 날에는 거의 모든 종목이
     내린다. 종목 자체의 문제인지 시장 탓인지는 RS로만 갈린다.
     """
     if not t or t.get("error"):
         return ""
     trend = t.get("trend", "unknown")
-    rs3, rs6 = t.get("rs_3m_pct"), t.get("rs_6m_pct")
-
-    def rs_span(label, v):
-        if v is None:
-            return f"{label} -"
-        color = GREEN if v >= 0 else RED
-        return f"{label} <span style='color:{color}'>{v:+.1f}%p</span>"
-
-    rows = [
-        f"<b style='color:{TREND_COLOR[trend]}'>추세 {TREND_KR[trend]}</b>"
-        f" · MA60 기울기 {t.get('ma60_slope_pct')}%"
-        f" · MA60 대비 {t.get('vs_ma60_pct')}%",
-        f"지수 대비 {rs_span('3M', rs3)} / {rs_span('6M', rs6)}",
-        f"52주 위치 {t.get('pos_52w_pct')}% "
-        f"(저점 {t.get('low_52w'):,} / 고점 {t.get('high_52w'):,})",
-        f"60일 지지 {t.get('swing_low_60d'):,} / 저항 {t.get('swing_high_60d'):,}"
-        f" · RSI {t.get('rsi14')}",
-        f"연변동성 {t.get('vol_annual_pct')}% · 1년 최대낙폭 "
-        f"{t.get('max_drawdown_1y_pct')}% · 거래량비 {t.get('volume_ratio')}",
-    ]
+    rs6 = t.get("rs_6m_pct")
+    rs = "-" if rs6 is None else (
+        f"<span style='color:{GREEN if rs6 >= 0 else RED}'>{rs6:+.1f}%p</span>"
+    )
     return (
-        f"<div style='margin-top:10px;padding:9px 11px;border:1px dashed {BORDER};"
-        f"border-radius:6px;font-size:12px;line-height:1.7;color:#3c4450'>"
-        + "<br>".join(rows)
-        + f"<div style='margin-top:6px;font-size:13px'><b>▶ 스탠스</b> "
-        f"{t.get('stance', '')}</div></div>"
+        f"<div style='font-size:12px;color:#3c4450;margin-top:7px'>"
+        f"<b style='color:{TREND_COLOR[trend]}'>추세 {TREND_KR[trend]}</b>"
+        f" · 지수 대비 6M {rs}"
+        f" · 52주 위치 {t.get('pos_52w_pct')}%"
+        f" · RSI {t.get('rsi14')}"
+        f" · 60일 {t.get('swing_low_60d'):,}~{t.get('swing_high_60d'):,}"
+        f" · 연변동성 {t.get('vol_annual_pct')}%</div>"
+    )
+
+
+# 카드마다 되풀이하면 23번 읽어야 하는 규칙이라 맨 위에 한 번만 둔다.
+LEGEND = (
+    f"<div style='font-size:12px;color:{MUTED};line-height:1.75;margin-bottom:14px'>"
+    f"<b>읽는 법</b> — <b>추가매수 ○</b> 진입 구간 있음 / <b>△</b> 지지 확인 후 소량 / "
+    f"<b>✕</b> 신규 자금 넣지 않음. 매수 구간은 <b>증권사 목표가×0.7</b>과 "
+    f"<b>MA60·60일 지지선</b>이 둘 다 허락할 때만 제시했고, 들어갈 때는 "
+    f"한 번에 담지 말고 2~3회로 나눈다. 비중 상한은 종목의 연변동성으로 정한다"
+    f"(변동성이 클수록 낮게). <b>여기 숫자는 전망이 아니라 이미 시장에 찍힌 값</b>이다."
+    f"</div>"
+)
+
+
+def todo(holdings: list, plans: dict) -> str:
+    """23장을 다 읽기 전에, 오늘 실제로 손볼 게 있는 종목만 먼저 보여준다.
+
+    `plan.py`가 `kakao`를 채운 종목이 곧 그 대상이다 — 비중 상한 초과, 지지선
+    이탈, 목표가 도달, 매수 구간 진입. 카톡으로 나가는 것과 같은 목록이라
+    메일과 카톡이 어긋나지 않는다.
+    """
+    items = [
+        (row, plans.get(row["ticker"]) or {})
+        for row in holdings
+        if (plans.get(row["ticker"]) or {}).get("kakao")
+    ]
+    if not items:
+        return (
+            f"<div style='border:1px solid {BORDER};border-radius:8px;padding:13px;"
+            f"margin-bottom:16px;font-size:13px;color:{MUTED}'>"
+            f"오늘 새로 결정할 종목 없음 — 지지선만 지켜보면 된다.</div>"
+        )
+    items.sort(key=lambda x: -(x[0].get("weight_pct") or 0))
+    rows = "".join(
+        f"<tr><td style='padding:4px 12px 4px 0;font-weight:700;white-space:nowrap'>"
+        f"{row['name']}</td>"
+        f"<td style='padding:4px 12px 4px 0;color:{MUTED};white-space:nowrap'>"
+        f"비중 {row.get('weight_pct')}%</td>"
+        f"<td style='padding:4px 0'>{p['kakao']}</td></tr>"
+        for row, p in items
+    )
+    return (
+        f"<div style='border:1px solid #d8e2f0;border-left:4px solid #1a5fb4;"
+        f"border-radius:8px;padding:14px;margin-bottom:16px;background:#f7fafd'>"
+        f"<div style='font-weight:700;margin-bottom:7px'>오늘 결정할 것 "
+        f"({len(items)}종목)</div>"
+        f"<table style='font-size:13px;border-collapse:collapse'>{rows}</table>"
+        f"<div style='font-size:11px;color:{MUTED};margin-top:7px'>"
+        f"나머지 종목은 아래 카드의 ▶ 대응에 기준선만 적어 뒀다 — 오늘 움직일 이유는 없다.</div>"
+        f"</div>"
     )
 
 
@@ -180,7 +217,8 @@ def portfolio_risk(holdings: list, tech: dict) -> str:
     )
 
 
-def card(row: dict, note: dict, tech_row: dict | None = None) -> str:
+def card(row: dict, note: dict, tech_row: dict | None = None,
+         plan_row: dict | None = None) -> str:
     price = row.get("current_price")
     day = row.get("day_change_pct")
     arrow = "▲" if (day or 0) > 0 else ("▼" if (day or 0) < 0 else "―")
@@ -191,9 +229,18 @@ def card(row: dict, note: dict, tech_row: dict | None = None) -> str:
     buy = range_man(buy_lo, buy_hi)
     multi = len(row.get("accounts") or []) > 1
 
+    # 배지는 "지금 이 종목을 어떻게 할 것인가"를 한 단어로 — 카드를 훑을 때
+    # 이 색만 보고도 손볼 종목이 골라져야 한다.
+    badge_style = {
+        "축소 검토": ("#fdecec", RED),
+        "관찰": ("#fff4e5", "#8a5a00"),
+        "보유": ("#e8f5ee", "#0b6b3a"),
+    }
+    label = (plan_row or {}).get("badge", "보유")
+    bg, fg = badge_style.get(label, ("#eef1f5", "#3c4450"))
     badges = [
-        f"<span style='background:#eef1f5;color:#3c4450;border-radius:4px;"
-        f"padding:2px 8px;font-size:12px'>보유</span>"
+        f"<span style='background:{bg};color:{fg};border-radius:4px;"
+        f"padding:2px 8px;font-size:12px'>{label}</span>"
     ]
     if multi:
         badges.append(
@@ -201,11 +248,13 @@ def card(row: dict, note: dict, tech_row: dict | None = None) -> str:
             f"padding:2px 8px;font-size:12px;margin-left:5px'>A·B 중복</span>"
         )
 
+    qty = sum(a["quantity"] for a in (row.get("accounts") or []))
     head = (
         f"<table width='100%' style='border-collapse:collapse'><tr>"
         f"<td style='vertical-align:top'>"
         f"<div style='font-size:19px;font-weight:700'>{row['name']}</div>"
-        f"<div style='font-size:12px;color:{MUTED};margin-top:2px'>{row['ticker']}</div>"
+        f"<div style='font-size:12px;color:{MUTED};margin-top:2px'>{row['ticker']}"
+        f"{f' · {qty:,}주' if qty else ''}</div>"
         f"</td>"
         f"<td align='right' style='vertical-align:top'>"
         f"<div style='font-size:19px;font-weight:700'>{won(price)}</div>"
@@ -228,17 +277,20 @@ def card(row: dict, note: dict, tech_row: dict | None = None) -> str:
             f"<td>{''.join(badges)}</td>"
             f"</tr></table>"
         )
-        if note.get("target_source"):
-            tgt_block += (
-                f"<div style='font-size:11px;color:{MUTED};margin-top:3px'>"
-                f"출처: {note['target_source']}</div>"
-            )
     else:
         tgt_block = (
             f"<table style='border-collapse:collapse;font-size:13px'><tr>"
             f"<td style='padding-right:22px'><div style='color:{MUTED};font-size:12px'>목표가</div>"
             f"<div style='color:{MUTED}'>컨센서스 확인 안 됨</div></td>"
             f"<td>{''.join(badges)}</td></tr></table>"
+        )
+    # 출처 메모는 목표가가 **없을 때** 더 중요하다 — 왜 비웠는지(오래됐는지,
+    # 커버리지가 없는지)를 알아야 "확인 안 됨"을 어떻게 받아들일지 정해진다.
+    if note.get("target_source"):
+        prefix = "출처: " if target else "메모: "
+        tgt_block += (
+            f"<div style='font-size:11px;color:{MUTED};margin-top:3px'>"
+            f"{prefix}{note['target_source']}</div>"
         )
 
     stats = (
@@ -249,26 +301,41 @@ def card(row: dict, note: dict, tech_row: dict | None = None) -> str:
         f"52주고점 {row.get('vs_52w_high_pct')}%</div>"
     )
 
-    body = []
+    # 강세론과 약세론은 한 덩어리로 붙인다. 따로 떼어 놓으면 둘 다 읽고 나서야
+    # 균형이 잡히는데, 카드가 길어지면 앞의 한쪽만 읽고 넘어가게 된다.
+    views = []
     if note.get("bull"):
-        body.append(
-            f"<div style='margin-top:10px;font-size:13px;line-height:1.65'>"
-            f"<b style='color:{GREEN}'>【강세론】</b> {note['bull']}</div>"
-        )
+        views.append(f"<b style='color:{GREEN}'>【강세론】</b>{note['bull']}")
     if note.get("bear"):
+        views.append(f"<b style='color:{RED}'>【약세론】</b>{note['bear']}")
+    body = []
+    if views:
         body.append(
-            f"<div style='margin-top:4px;font-size:13px;line-height:1.65'>"
-            f"<b style='color:{RED}'>【약세론】</b> {note['bear']}</div>"
+            f"<div style='margin-top:11px;font-size:13px;line-height:1.7'>"
+            + " ".join(views)
+            + "</div>"
         )
+
+    # "▶ 대응"이 이 카드의 결론이다. plan.py가 만든 기준선이 먼저 오고,
+    # 뉴스에서 읽은 종목별 사정(note.action)이 뒤에 붙는다.
+    action_parts = list((plan_row or {}).get("lines") or [])
     if note.get("action"):
+        action_parts.append(note["action"])
+    if action_parts:
+        stance = (plan_row or {}).get("stance")
+        head_txt = f"<b style='color:{RED}'>▶ 대응</b>"
+        if stance:
+            head_txt += f" <b>{stance}</b>"
         body.append(
-            f"<div style='margin-top:10px;padding:9px 11px;background:#f6f8fa;"
-            f"border-radius:6px;font-size:13px;line-height:1.65'>"
-            f"<b>▶ 대응</b> {note['action']}</div>"
+            f"<div style='margin-top:11px;padding:11px 12px;background:#f6f8fa;"
+            f"border-left:3px solid {RED};border-radius:6px;font-size:13px;"
+            f"line-height:1.75'>{head_txt}<br>"
+            + "<br>".join(action_parts)
+            + "</div>"
         )
     if note.get("check"):
         body.append(
-            f"<div style='margin-top:6px;font-size:12px;color:{MUTED}'>"
+            f"<div style='margin-top:7px;font-size:12px;color:{MUTED}'>"
             f"✓ 체크: {note['check']}</div>"
         )
 
@@ -279,16 +346,18 @@ def card(row: dict, note: dict, tech_row: dict | None = None) -> str:
         + f"<hr style='border:0;border-top:1px solid {BORDER};margin:11px 0'>"
         + tgt_block
         + stats
-        + account_rows(row, price)
-        + tech_block(tech_row or {})
+        + tech_line(tech_row or {})
+        + (account_rows(row, price) if multi else "")
         + "".join(body)
         + "</div>"
     )
 
 
-def build(notes: dict, briefing: dict | None = None, tech: dict | None = None) -> dict:
+def build(notes: dict, briefing: dict | None = None, tech: dict | None = None,
+          plans: dict | None = None) -> dict:
     briefing = briefing or build_briefing()
     tech = tech or {}
+    plans = plans or {}
     date = briefing["date"]
     holdings = briefing["all_holdings"]
 
@@ -301,7 +370,8 @@ def build(notes: dict, briefing: dict | None = None, tech: dict | None = None) -
     )
 
     cards = [
-        card(row, notes.get(row["ticker"], {}), tech.get(row["ticker"]))
+        card(row, notes.get(row["ticker"], {}), tech.get(row["ticker"]),
+             plans.get(row["ticker"]))
         for row in holdings
     ]
 
@@ -312,7 +382,9 @@ def build(notes: dict, briefing: dict | None = None, tech: dict | None = None) -
         f"<div style='font-size:13px;color:{MUTED};margin-bottom:16px'>"
         f"{date} · 보유 {len(holdings)}종목 · 조회 시점 시세 기준</div>"
         + summary
+        + todo(holdings, plans)
         + portfolio_risk(holdings, tech)
+        + LEGEND
         + "".join(cards)
         + f"<p style='color:{MUTED};font-size:12px;margin-top:18px'>{DISCLAIMER}</p>"
         f"</div>"
@@ -330,7 +402,12 @@ def main():
         briefing = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
     if len(sys.argv) > 3:
         tech = json.loads(Path(sys.argv[3]).read_text(encoding="utf-8"))
-    print(json.dumps(build(notes, briefing, tech), ensure_ascii=False))
+    # 대응 기준선은 브리핑·지표가 둘 다 있을 때만 만들 수 있다.
+    plans = None
+    if briefing and tech:
+        from plan import build_all  # noqa: PLC0415
+        plans = build_all(briefing, tech, notes)
+    print(json.dumps(build(notes, briefing, tech, plans), ensure_ascii=False))
     return 0
 
 
